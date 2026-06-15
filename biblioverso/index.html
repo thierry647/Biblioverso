@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Biblioverso</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navegação principal">
+        <div class="brand">
+          <div class="brand-mark">B</div>
+          <div>
+            <strong>Biblioverso</strong>
+            <span>rede de leitores</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item is-active" data-view="feed" type="button">
+            <span>Início</span>
+          </button>
+          <button class="nav-item" data-view="new-review" type="button">
+            <span>Novo depoimento</span>
+          </button>
+          <button class="nav-item" data-view="profile" type="button">
+            <span>Meu perfil</span>
+          </button>
+          <button class="nav-item" data-view="ranking" type="button">
+            <span>Ranking</span>
+          </button>
+          <button class="nav-item" data-view="want" type="button">
+            <span>Quero ler</span>
+          </button>
+          <button class="nav-item" data-view="challenges" type="button">
+            <span>Desafios</span>
+          </button>
+          <button class="nav-item" data-view="recommendations" type="button">
+            <span>Recomendações</span>
+          </button>
+          <button class="nav-item" data-view="clubs" type="button">
+            <span>Clubes</span>
+          </button>
+          <button class="nav-item" data-view="admin" type="button">
+            <span>Admin</span>
+          </button>
+        </nav>
+
+        <section class="login-box" aria-labelledby="login-title">
+          <h2 id="login-title">Conta</h2>
+          <label for="user-name">Nome</label>
+          <input id="user-name" autocomplete="name" placeholder="Seu nome" />
+          <label for="user-role">Tipo de acesso</label>
+          <select id="user-role">
+            <option value="reader">Leitor</option>
+            <option value="admin">Administrador</option>
+          </select>
+          <label id="admin-password-label" for="admin-password" hidden>Senha do admin</label>
+          <input id="admin-password" type="password" placeholder="Senha do administrador" hidden />
+          <button id="login-button" class="primary-button" type="button">Entrar</button>
+          <p id="session-status">Você está como visitante.</p>
+        </section>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Comunidade literária</p>
+            <h1 id="page-title">Descubra o que os leitores sentiram</h1>
+          </div>
+          <div class="search-wrap">
+            <label class="sr-only" for="search">Buscar</label>
+            <input id="search" placeholder="Buscar livro, autor ou leitor" />
+          </div>
+        </header>
+
+        <section id="feed-view" class="view is-visible" aria-labelledby="feed-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="feed-heading">Feed de depoimentos</h2>
+              <p>Opiniões pessoais, notas e livros que estão marcando a comunidade.</p>
+            </div>
+            <button class="secondary-button" data-view="new-review" type="button">Publicar</button>
+          </div>
+          <div id="reviews-grid" class="reviews-grid"></div>
+        </section>
+
+        <section id="new-review-view" class="view" aria-labelledby="new-review-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="new-review-heading">Novo depoimento</h2>
+              <p>Registre um livro e conte como ele conversou com você.</p>
+            </div>
+          </div>
+          <form id="review-form" class="form-panel">
+            <div class="form-grid">
+              <label>
+                Livro
+                <input name="title" required placeholder="Ex: O Pequeno Príncipe" />
+              </label>
+              <label>
+                Autor
+                <input name="author" required placeholder="Ex: Antoine de Saint-Exupéry" />
+              </label>
+              <label>
+                Categoria
+                <select name="category">
+                  <option>Ficção</option>
+                  <option>Fantasia</option>
+                  <option>Romance</option>
+                  <option>Autoajuda</option>
+                  <option>Biografia</option>
+                  <option>Clássico</option>
+                </select>
+              </label>
+              <label>
+                Nota
+                <input name="rating" type="number" min="1" max="5" value="5" required />
+              </label>
+            </div>
+            <label>
+              Seu depoimento
+              <textarea
+                name="text"
+                rows="7"
+                required
+                placeholder="Escreva o que você sentiu, aprendeu ou recomendaria..."
+              ></textarea>
+            </label>
+            <button class="primary-button" type="submit">Salvar depoimento</button>
+          </form>
+        </section>
+
+        <section id="profile-view" class="view" aria-labelledby="profile-heading">
+          <div class="profile-header">
+            <div class="avatar" id="profile-avatar">V</div>
+            <div>
+              <p class="eyebrow">Perfil</p>
+              <h2 id="profile-heading">Visitante</h2>
+              <p id="profile-summary">Entre com seu nome para criar sua estante.</p>
+            </div>
+          </div>
+          <div class="stats-row">
+            <article>
+              <strong id="stat-reviews">0</strong>
+              <span>depoimentos</span>
+            </article>
+            <article>
+              <strong id="stat-books">0</strong>
+              <span>livros únicos</span>
+            </article>
+            <article>
+              <strong id="stat-average">0.0</strong>
+              <span>nota média</span>
+            </article>
+          </div>
+          <div id="profile-list" class="profile-list"></div>
+        </section>
+
+        <section id="ranking-view" class="view" aria-labelledby="ranking-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="ranking-heading">Ranking de livros mais comentados</h2>
+              <p>Veja quais livros estão aparecendo mais nos depoimentos da comunidade.</p>
+            </div>
+          </div>
+          <div id="ranking-list" class="feature-list"></div>
+        </section>
+
+        <section id="want-view" class="view" aria-labelledby="want-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="want-heading">Lista quero ler</h2>
+              <p>Guarde livros para ler depois e acompanhe sua próxima estante.</p>
+            </div>
+          </div>
+          <form id="want-form" class="mini-form">
+            <input name="title" required placeholder="Nome do livro" />
+            <input name="author" required placeholder="Autor" />
+            <button class="primary-button" type="submit">Adicionar</button>
+          </form>
+          <div id="want-list" class="feature-list"></div>
+        </section>
+
+        <section id="challenges-view" class="view" aria-labelledby="challenges-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="challenges-heading">Desafios de leitura</h2>
+              <p>Metas simples para deixar a leitura mais divertida durante o mês.</p>
+            </div>
+          </div>
+          <div id="challenges-list" class="feature-grid"></div>
+        </section>
+
+        <section id="recommendations-view" class="view" aria-labelledby="recommendations-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="recommendations-heading">Recomendações para você</h2>
+              <p>Sugestões baseadas nas categorias e livros que você curtiu.</p>
+            </div>
+          </div>
+          <div id="recommendations-list" class="feature-grid"></div>
+        </section>
+
+        <section id="clubs-view" class="view" aria-labelledby="clubs-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="clubs-heading">Clubes de leitura</h2>
+              <p>Entre em grupos temáticos e acompanhe leituras coletivas.</p>
+            </div>
+          </div>
+          <div id="clubs-list" class="feature-grid"></div>
+        </section>
+
+        <section id="admin-view" class="view" aria-labelledby="admin-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="admin-heading">Painel do administrador</h2>
+              <p>Controle conteúdos publicados e acompanhe os números principais.</p>
+            </div>
+          </div>
+          <div id="admin-locked" class="empty-state">
+            Entre como administrador para acessar este painel.
+          </div>
+          <div id="admin-panel" class="admin-panel" hidden>
+            <div class="stats-row">
+              <article>
+                <strong id="admin-total-reviews">0</strong>
+                <span>publicações</span>
+              </article>
+              <article>
+                <strong id="admin-total-users">0</strong>
+                <span>leitores</span>
+              </article>
+              <article>
+                <strong id="admin-total-books">0</strong>
+                <span>livros</span>
+              </article>
+            </div>
+            <div id="admin-list" class="admin-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="review-template">
+      <article class="review-card">
+        <div class="book-cover" aria-hidden="true"></div>
+        <div class="review-content">
+          <div class="review-meta">
+            <span class="category"></span>
+            <span class="rating"></span>
+          </div>
+          <h3></h3>
+          <p class="author"></p>
+          <p class="quote"></p>
+          <div class="review-footer">
+            <span class="reviewer"></span>
+            <button class="ghost-button like-button" type="button">Curtir</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>

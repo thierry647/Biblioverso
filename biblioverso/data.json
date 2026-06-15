@@ -1,0 +1,37 @@
+{
+  "reviews": [
+    {
+      "id": "seed-1",
+      "title": "O Pequeno Pr\u00edncipe",
+      "author": "Antoine de Saint-Exup\u00e9ry",
+      "category": "Cl\u00e1ssico",
+      "rating": 5,
+      "text": "Parece simples, mas fala de amizade, cuidado e amadurecimento de um jeito que fica ecoando depois da leitura.",
+      "reviewer": "Lia",
+      "likes": 12,
+      "createdAt": 1718400000000
+    },
+    {
+      "id": "seed-2",
+      "title": "Capit\u00e3es da Areia",
+      "author": "Jorge Amado",
+      "category": "Fic\u00e7\u00e3o",
+      "rating": 5,
+      "text": "Um livro forte, cheio de vida, que mostra personagens esquecidos com humanidade e muita energia.",
+      "reviewer": "Rafael",
+      "likes": 8,
+      "createdAt": 1718313600000
+    },
+    {
+      "id": "seed-3",
+      "title": "A Biblioteca da Meia-Noite",
+      "author": "Matt Haig",
+      "category": "Romance",
+      "rating": 4,
+      "text": "Gostei porque transforma arrependimento em pergunta: e se a gente pudesse olhar para a pr\u00f3pria vida com mais gentileza?",
+      "reviewer": "Marina",
+      "likes": 5,
+      "createdAt": 1718227200000
+    }
+  ]
+}
