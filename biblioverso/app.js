@@ -1,12 +1,19 @@
-const adminPassword = "admin123";
+const adminPassword = "thierry123@";
 const sessionKey = "biblioverso-session";
 const libraryKey = "biblioverso-library";
 
 const state = {
   session: loadSession(),
   reviews: [],
+  clubs: [],
+  userBooks: [],
   library: loadLibrary(),
+  authMode: "login",
+  profilePanel: "reviews",
 };
+
+const defaultView = "feed";
+let activeView = defaultView;
 
 const challenges = [
   {
@@ -29,27 +36,6 @@ const challenges = [
   },
 ];
 
-const clubs = [
-  {
-    id: "classicos",
-    title: "Clube dos Clássicos",
-    text: "Leituras coletivas de obras brasileiras e internacionais que atravessaram gerações.",
-    members: 42,
-  },
-  {
-    id: "fantasia",
-    title: "Fantasia e Mundos",
-    text: "Para quem gosta de magia, aventuras, mapas, sagas e universos inventados.",
-    members: 35,
-  },
-  {
-    id: "vida-real",
-    title: "Leituras da Vida Real",
-    text: "Biografias, memórias, comportamento e livros que ajudam a entender pessoas.",
-    members: 28,
-  },
-];
-
 const views = {
   feed: document.querySelector("#feed-view"),
   "new-review": document.querySelector("#new-review-view"),
@@ -68,21 +54,45 @@ const reviewTemplate = document.querySelector("#review-template");
 const searchInput = document.querySelector("#search");
 const reviewForm = document.querySelector("#review-form");
 const wantForm = document.querySelector("#want-form");
-const userNameInput = document.querySelector("#user-name");
-const userRoleInput = document.querySelector("#user-role");
-const adminPasswordInput = document.querySelector("#admin-password");
-const adminPasswordLabel = document.querySelector("#admin-password-label");
+const loginForm = document.querySelector("#login-form");
+const registerForm = document.querySelector("#register-form");
+const toggleAuthModeButton = document.querySelector("#toggle-auth-mode");
+const logoutButton = document.querySelector("#logout-button");
+const sidebarLogoutButton = document.querySelector("#sidebar-logout-button");
 const sessionStatus = document.querySelector("#session-status");
+const sidebarSessionStatus = document.querySelector("#sidebar-session-status");
+const adminNavItem = document.querySelector(".admin-nav-item");
 const profileHeading = document.querySelector("#profile-heading");
 const profileSummary = document.querySelector("#profile-summary");
 const profileAvatar = document.querySelector("#profile-avatar");
 const profileList = document.querySelector("#profile-list");
+const profileBioForm = document.querySelector("#profile-bio-form");
+const profileBioPreview = document.querySelector("#profile-bio-preview");
+const authorBookForm = document.querySelector("#author-book-form");
+const authorBooksList = document.querySelector("#author-books-list");
+const clubForm = document.querySelector("#club-form");
 const adminLocked = document.querySelector("#admin-locked");
 const adminPanel = document.querySelector("#admin-panel");
 const adminList = document.querySelector("#admin-list");
+const authTitle = document.querySelector("#login-title");
+const authCopy = document.querySelector(".auth-copy");
+const authCopyText = document.createElement("p");
+
+loginForm.querySelector("label").childNodes[0].nodeValue = "Nome de usuario";
+registerForm.querySelector("label").childNodes[0].nodeValue = "Email ou numero";
+authTitle.textContent = "Entre no Biblioverso";
+authCopyText.textContent = "Acesse seu feed de feedbacks literarios e descubra novas leituras pela voz da comunidade.";
+authCopy.append(authCopyText);
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => showView(button.dataset.view));
+});
+
+document.querySelectorAll("[data-profile-panel]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.profilePanel = button.dataset.profilePanel;
+    renderProfile();
+  });
 });
 
 document.addEventListener("click", (event) => {
@@ -92,22 +102,51 @@ document.addEventListener("click", (event) => {
   window.requestAnimationFrame(() => button.classList.add("clicked"));
 });
 
-userRoleInput.addEventListener("change", renderAdminPasswordField);
+toggleAuthModeButton.addEventListener("click", () => {
+  state.authMode = state.authMode === "login" ? "register" : "login";
+  render();
+});
 
-document.querySelector("#login-button").addEventListener("click", () => {
-  const name = userNameInput.value.trim() || "Leitor";
-  const role = userRoleInput.value;
+logoutButton.addEventListener("click", () => {
+  logout();
+});
 
-  if (role === "admin" && adminPasswordInput.value !== adminPassword) {
-    state.session = { name, role: "reader" };
-    saveSession();
-    render();
-    sessionStatus.textContent = "Senha de administrador incorreta. Você entrou como leitor.";
-    return;
-  }
+sidebarLogoutButton.addEventListener("click", logout);
 
-  state.session = { name, role };
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(loginForm);
+  const response = await postJson("/api/auth/login", {
+    identifier: form.get("identifier").trim(),
+    password: form.get("password"),
+  });
+
+  if (!response.ok) return showFormError(response.data.error);
+  state.session = response.data.user;
   saveSession();
+  loginForm.reset();
+  await loadUserExtras();
+  showView(defaultView);
+  render();
+});
+
+registerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(registerForm);
+  const identifier = form.get("identifier").trim();
+  const response = await postJson("/api/auth/register", {
+    name: displayNameFromIdentifier(identifier),
+    identifier,
+    password: form.get("password"),
+  });
+
+  if (!response.ok) return showFormError(response.data.error);
+  state.session = response.data.user;
+  saveSession();
+  registerForm.reset();
+  state.authMode = "login";
+  await loadUserExtras();
+  showView(defaultView);
   render();
 });
 
@@ -117,20 +156,16 @@ reviewForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(reviewForm);
   const reviewer = state.session?.name || "Visitante";
-
-  await fetch("/api/reviews", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title: form.get("title").trim(),
-      author: form.get("author").trim(),
-      category: form.get("category"),
-      rating: Number(form.get("rating")),
-      text: form.get("text").trim(),
-      reviewer,
-    }),
+  const response = await postJson("/api/reviews", {
+    title: form.get("title").trim(),
+    author: form.get("author").trim(),
+    category: form.get("category"),
+    rating: Number(form.get("rating")),
+    text: form.get("text").trim(),
+    reviewer,
   });
 
+  if (!response.ok) return alert(response.data.error || "Não foi possível salvar o depoimento.");
   reviewForm.reset();
   reviewForm.elements.rating.value = 5;
   await fetchReviews();
@@ -149,6 +184,60 @@ wantForm.addEventListener("submit", (event) => {
   renderWantList();
 });
 
+profileBioForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!isRealUser()) return alert("Entre com uma conta de leitor para editar o perfil.");
+  const form = new FormData(profileBioForm);
+  const response = await requestJson(`/api/users/${state.session.id}/profile`, {
+    method: "PATCH",
+    body: {
+      bio: form.get("bio"),
+      socialLinks: form.get("socialLinks"),
+    },
+  });
+
+  if (!response.ok) return alert(response.data.error || "Não foi possível salvar o perfil.");
+  state.session = response.data.user;
+  saveSession();
+  renderProfile();
+});
+
+authorBookForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!isRealUser()) return alert("Entre com uma conta de leitor para publicar seu livro.");
+  const form = new FormData(authorBookForm);
+  const response = await postJson(`/api/users/${state.session.id}/books`, {
+    title: form.get("title").trim(),
+    genre: form.get("genre").trim(),
+    description: form.get("description").trim(),
+    link: form.get("link").trim(),
+  });
+
+  if (!response.ok) return alert(response.data.error || "Não foi possível publicar o livro.");
+  authorBookForm.reset();
+  await fetchUserBooks();
+  renderProfile();
+});
+
+clubForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(clubForm);
+  const response = await requestJson("/api/clubs", {
+    method: "POST",
+    headers: getAdminHeaders(),
+    body: {
+      title: form.get("title").trim(),
+      theme: form.get("theme").trim(),
+      description: form.get("description").trim(),
+    },
+  });
+
+  if (!response.ok) return alert(response.data.error || "Não foi possível criar o clube.");
+  clubForm.reset();
+  await fetchClubs();
+  renderClubs();
+});
+
 function loadSession() {
   try {
     return JSON.parse(localStorage.getItem(sessionKey)) || null;
@@ -158,6 +247,10 @@ function loadSession() {
 }
 
 function saveSession() {
+  if (!state.session) {
+    localStorage.removeItem(sessionKey);
+    return;
+  }
   localStorage.setItem(sessionKey, JSON.stringify(state.session));
 }
 
@@ -174,13 +267,57 @@ function saveLibrary() {
   localStorage.setItem(libraryKey, JSON.stringify(state.library));
 }
 
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    method: options.method || "GET",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, data };
+}
+
+function postJson(url, body) {
+  return requestJson(url, { method: "POST", body });
+}
+
 async function fetchReviews() {
-  const response = await fetch("/api/reviews");
-  const data = await response.json();
-  state.reviews = data.reviews || [];
+  const response = await requestJson("/api/reviews");
+  state.reviews = response.data.reviews || [];
+}
+
+async function fetchClubs() {
+  const response = await requestJson("/api/clubs");
+  state.clubs = response.data.clubs || [];
+}
+
+async function fetchUserBooks() {
+  if (!isRealUser()) {
+    state.userBooks = [];
+    return;
+  }
+  const response = await requestJson(`/api/users/${state.session.id}/books`);
+  state.userBooks = response.data.books || [];
+}
+
+async function loadUserExtras() {
+  await fetchUserBooks();
 }
 
 function showView(viewName) {
+  if (!state.session) {
+    activeView = defaultView;
+    return;
+  }
+
+  if (viewName === "admin" && !isAdmin()) {
+    viewName = defaultView;
+  }
+
+  activeView = viewName;
   Object.entries(views).forEach(([name, view]) => {
     view.classList.toggle("is-visible", name === viewName);
   });
@@ -204,8 +341,9 @@ function showView(viewName) {
 }
 
 function render() {
-  renderSession();
-  renderAdminPasswordField();
+  renderAccessState();
+  renderAuthForms();
+  syncSessionUi();
   renderFeed();
   renderProfile();
   renderRanking();
@@ -214,26 +352,72 @@ function render() {
   renderRecommendations();
   renderClubs();
   renderAdmin();
+  showView(activeView);
 }
 
-function renderAdminPasswordField() {
-  const isAdminSelected = userRoleInput.value === "admin";
-  adminPasswordInput.hidden = !isAdminSelected;
-  adminPasswordLabel.hidden = !isAdminSelected;
-}
+function syncSessionUi() {
+  adminNavItem.hidden = !isAdmin();
+  sidebarLogoutButton.hidden = !state.session;
 
-function renderSession() {
   if (!state.session) {
+    sessionStatus.textContent = "Voce precisa entrar para acessar o Biblioverso.";
+    sidebarSessionStatus.textContent = "";
+    return;
+  }
+
+  const roleText = isAdmin() ? "administrador" : "leitor";
+  const handle = state.session.username ? ` @${state.session.username}` : "";
+  sidebarSessionStatus.textContent = `${state.session.name}${handle}`;
+  sessionStatus.textContent = `${state.session.name}${handle} entrou como ${roleText}.`;
+}
+
+function renderAccessState() {
+  const logged = Boolean(state.session);
+  document.body.classList.toggle("auth-locked", !logged);
+  document.body.classList.toggle("auth-ready", logged);
+
+  toggleAuthModeButton.textContent = state.authMode === "login" ? "Fazer cadastro" : "Voltar ao login";
+
+  if (!logged) {
+    activeView = defaultView;
+    Object.values(views).forEach((view) => view.classList.remove("is-visible"));
+    return;
+  }
+
+  if (activeView === "admin" && !isAdmin()) {
+    activeView = defaultView;
+  }
+}
+
+function renderAuthForms() {
+  const logged = Boolean(state.session);
+  const adminUser = isAdmin();
+  loginForm.hidden = logged || state.authMode !== "login";
+  registerForm.hidden = logged || state.authMode !== "register";
+  toggleAuthModeButton.hidden = logged;
+  logoutButton.hidden = !logged;
+  sidebarLogoutButton.hidden = !logged;
+  adminNavItem.hidden = !adminUser;
+  toggleAuthModeButton.textContent = state.authMode === "login" ? "Fazer cadastro" : "Voltar ao login";
+  authTitle.textContent = state.authMode === "login" ? "Entre no Biblioverso" : "Crie sua conta";
+  authCopyText.textContent =
+    state.authMode === "login"
+      ? "Acesse seu feed de feedbacks literarios e descubra novas leituras pela voz da comunidade."
+      : "Cadastre seu email ou numero, crie uma senha e entre direto no seu feed.";
+  toggleAuthModeButton.textContent = state.authMode === "login" ? "Criar conta" : "Já tenho conta";
+
+  if (!logged) {
     sessionStatus.textContent = "Você está como visitante.";
     return;
   }
 
-  userNameInput.value = state.session.name;
-  userRoleInput.value = state.session.role;
-  sessionStatus.textContent =
-    state.session.role === "admin"
-      ? `${state.session.name} entrou como administrador.`
-      : `${state.session.name} entrou como leitor.`;
+  const roleText = state.session.role === "admin" ? "administrador" : "leitor";
+  const handle = state.session.username ? ` @${state.session.username}` : "";
+  sessionStatus.textContent = `${state.session.name}${handle} entrou como ${roleText}.`;
+}
+
+function showFormError(message) {
+  sessionStatus.textContent = message || "Não foi possível concluir a ação.";
 }
 
 function renderFeed() {
@@ -252,6 +436,7 @@ function renderFeed() {
 
   reviews.forEach((review, index) => {
     const card = reviewTemplate.content.firstElementChild.cloneNode(true);
+    card.style.animationDelay = `${Math.min(index, 8) * 55}ms`;
     card.querySelector(".book-cover").style.backgroundColor = coverColor(index);
     card.querySelector(".category").textContent = review.category;
     card.querySelector(".rating").textContent = "★".repeat(review.rating);
@@ -294,19 +479,87 @@ function renderProfile() {
   profileHeading.textContent = name;
   profileAvatar.textContent = name.charAt(0).toUpperCase();
   profileSummary.textContent = state.session
-    ? "Sua estante mostra os depoimentos publicados por você."
-    : "Entre com seu nome para criar sua estante.";
+    ? "Seu perfil reúne seu feed, biografia, links e livros autorais."
+    : "Entre com sua conta para criar sua estante.";
   document.querySelector("#stat-reviews").textContent = mine.length;
   document.querySelector("#stat-books").textContent = uniqueBooks.size;
   document.querySelector("#stat-average").textContent = average.toFixed(1);
 
+  document.querySelectorAll("[data-profile-panel]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.profilePanel === state.profilePanel);
+  });
+
+  profileList.hidden = state.profilePanel !== "reviews";
+  profileBioForm.hidden = state.profilePanel !== "bio" || !isRealUser();
+  profileBioPreview.hidden = state.profilePanel !== "bio";
+  authorBookForm.hidden = state.profilePanel !== "books" || !isRealUser();
+  authorBooksList.hidden = state.profilePanel !== "books";
+
+  renderProfileReviews(mine);
+  renderProfileBio();
+  renderAuthorBooks();
+}
+
+function renderProfileReviews(mine) {
   profileList.innerHTML = "";
   if (!mine.length) {
     profileList.innerHTML = '<div class="empty-state">Você ainda não publicou depoimentos.</div>';
     return;
   }
-
   mine.forEach((review) => profileList.append(createListRow(review)));
+}
+
+function renderProfileBio() {
+  const bio = state.session?.bio || "";
+  const socialLinks = state.session?.socialLinks || "";
+  profileBioForm.elements.bio.value = bio;
+  profileBioForm.elements.socialLinks.value = socialLinks;
+
+  const bioHtml = formatMultilineText(bio) || "Nenhuma biografia cadastrada.";
+  const linksHtml = formatMultilineText(socialLinks) || "Nenhum link social cadastrado.";
+  profileBioPreview.innerHTML = `
+    <article class="bio-card">
+      <h3>Biografia</h3>
+      <p>${bioHtml}</p>
+      <h3>Links e redes</h3>
+      <p>${linksHtml}</p>
+    </article>
+  `;
+}
+
+function renderAuthorBooks() {
+  authorBooksList.innerHTML = "";
+  if (!isRealUser()) {
+    authorBooksList.innerHTML = '<div class="empty-state">Entre com uma conta de leitor para publicar livros de sua autoria.</div>';
+    return;
+  }
+  if (!state.userBooks.length) {
+    authorBooksList.innerHTML = '<div class="empty-state">Você ainda não publicou livros autorais no perfil.</div>';
+    return;
+  }
+
+  state.userBooks.forEach((book) => {
+    const row = document.createElement("article");
+    row.className = "list-row";
+    row.innerHTML = `
+      <div>
+        <h3></h3>
+        <p></p>
+      </div>
+    `;
+    row.querySelector("h3").textContent = book.title;
+    row.querySelector("p").textContent = `${book.genre} · ${book.description}`;
+    if (book.link) {
+      const link = document.createElement("a");
+      link.className = "ghost-button inline-link-button";
+      link.href = book.link;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = "Abrir";
+      row.append(link);
+    }
+    authorBooksList.append(row);
+  });
 }
 
 function renderRanking() {
@@ -447,26 +700,43 @@ function renderRecommendations() {
 function renderClubs() {
   const list = document.querySelector("#clubs-list");
   list.innerHTML = "";
+  clubForm.hidden = !isAdmin();
 
-  clubs.forEach((club) => {
+  if (!state.clubs.length) {
+    list.innerHTML = '<div class="empty-state">Ainda não há clubes cadastrados.</div>';
+    return;
+  }
+
+  state.clubs.forEach((club) => {
     const joined = state.library.joinedClubs.includes(club.id);
-    const card = createFeatureCard(club.title, club.text, `${club.members} membros`);
-    const button = document.createElement("button");
-    button.className = joined ? "primary-button" : "ghost-button";
-    button.type = "button";
-    button.textContent = joined ? "Você está no clube" : "Entrar no clube";
-    button.addEventListener("click", () => toggleListItem("joinedClubs", club.id));
-    card.append(button);
+    const card = createFeatureCard(club.title, club.description, `${club.theme} · ${club.members} membros`);
+    const joinButton = document.createElement("button");
+    joinButton.className = joined ? "primary-button" : "ghost-button";
+    joinButton.type = "button";
+    joinButton.textContent = joined ? "Sair do clube" : "Entrar no clube";
+    joinButton.addEventListener("click", () => toggleClubMembership(club.id, joined));
+    card.append(joinButton);
+
+    if (isAdmin()) {
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "ghost-button danger-button";
+      deleteButton.type = "button";
+      deleteButton.textContent = "Excluir clube";
+      deleteButton.addEventListener("click", () => deleteClub(club.id));
+      card.append(deleteButton);
+    }
+
     list.append(card);
   });
 }
 
 function renderAdmin() {
-  const isAdmin = state.session?.role === "admin";
-  adminLocked.hidden = isAdmin;
-  adminPanel.hidden = !isAdmin;
+  const isAdminUser = isAdmin();
+  adminNavItem.hidden = !isAdminUser;
+  adminLocked.hidden = isAdminUser;
+  adminPanel.hidden = !isAdminUser;
 
-  if (!isAdmin) return;
+  if (!isAdminUser) return;
 
   document.querySelector("#admin-total-reviews").textContent = state.reviews.length;
   document.querySelector("#admin-total-users").textContent = new Set(
@@ -484,13 +754,45 @@ function renderAdmin() {
     deleteButton.type = "button";
     deleteButton.textContent = "Remover";
     deleteButton.addEventListener("click", async () => {
-      await fetch(`/api/reviews/${review.id}`, { method: "DELETE" });
+      const response = await requestJson(`/api/reviews/${review.id}`, {
+        method: "DELETE",
+        headers: getAdminHeaders(),
+      });
+
+      if (!response.ok) return alert(response.data.error || "Não foi possível remover o depoimento.");
       await fetchReviews();
       render();
     });
     row.append(deleteButton);
     adminList.append(row);
   });
+}
+
+async function toggleClubMembership(clubId, joined) {
+  const action = joined ? "leave" : "join";
+  const response = await postJson(`/api/clubs/${clubId}/${action}`, {});
+  if (!response.ok) return alert(response.data.error || "Não foi possível atualizar o clube.");
+
+  if (joined) {
+    state.library.joinedClubs = state.library.joinedClubs.filter((id) => id !== clubId);
+  } else {
+    state.library.joinedClubs.push(clubId);
+  }
+  saveLibrary();
+  await fetchClubs();
+  renderClubs();
+}
+
+async function deleteClub(clubId) {
+  const response = await requestJson(`/api/clubs/${clubId}`, {
+    method: "DELETE",
+    headers: getAdminHeaders(),
+  });
+  if (!response.ok) return alert(response.data.error || "Não foi possível excluir o clube.");
+  state.library.joinedClubs = state.library.joinedClubs.filter((id) => id !== clubId);
+  saveLibrary();
+  await fetchClubs();
+  renderClubs();
 }
 
 function createListRow(review) {
@@ -556,9 +858,59 @@ function toggleListItem(listName, id) {
   render();
 }
 
+function formatMultilineText(text) {
+  const escaped = String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return escaped
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => linkify(line))
+    .join("<br>");
+}
+
+function linkify(text) {
+  return text.replace(
+    /(https?:\/\/[^\s]+)/g,
+    '<a href="$1" target="_blank" rel="noreferrer">$1</a>'
+  );
+}
+
+function isAdmin() {
+  return state.session?.role === "admin";
+}
+
+function isRealUser() {
+  return Boolean(state.session && state.session.role !== "admin" && state.session.id !== "admin");
+}
+
+function getAdminHeaders() {
+  if (!isAdmin()) return {};
+  return { "X-Admin-Password": adminPassword };
+}
+
+function logout() {
+  state.session = null;
+  state.userBooks = [];
+  activeView = defaultView;
+  saveSession();
+  render();
+}
+
+function displayNameFromIdentifier(identifier) {
+  const cleaned = String(identifier || "").trim();
+  if (!cleaned) return "Leitor";
+  const baseName = cleaned.includes("@") ? cleaned.split("@")[0] : cleaned;
+  return baseName.replace(/[._-]+/g, " ").trim() || "Leitor";
+}
+
 function coverColor(index) {
   const colors = ["#8fbc9b", "#a7c7e7", "#f0b7a4", "#c8b6df", "#e7cf8f"];
   return colors[index % colors.length];
 }
 
-fetchReviews().then(render);
+Promise.all([fetchReviews(), fetchClubs(), loadUserExtras()]).then(() => {
+  if (state.session) showView(defaultView);
+  render();
+});
