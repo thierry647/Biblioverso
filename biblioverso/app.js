@@ -78,10 +78,14 @@ const authTitle = document.querySelector("#login-title");
 const authCopy = document.querySelector(".auth-copy");
 const authCopyText = document.createElement("p");
 
-loginForm.querySelector("label").childNodes[0].nodeValue = "Nome de usuario";
-registerForm.querySelector("label").childNodes[0].nodeValue = "Email ou numero";
+loginForm.querySelector("label").childNodes[0].nodeValue = "Email ou numero de telefone";
+registerForm.querySelector("label").childNodes[0].nodeValue = "Email ou numero de telefone";
+loginForm.elements.identifier.placeholder = "voce@email.com ou (11) 99999-9999";
+registerForm.elements.identifier.placeholder = "voce@email.com ou (11) 99999-9999";
+loginForm.elements.identifier.inputMode = "email";
+registerForm.elements.identifier.inputMode = "email";
 authTitle.textContent = "Entre no Biblioverso";
-authCopyText.textContent = "Acesse seu feed de feedbacks literarios e descubra novas leituras pela voz da comunidade.";
+authCopyText.textContent = "Entre com email ou telefone para acessar seu feed de leituras.";
 authCopy.append(authCopyText);
 
 document.querySelectorAll("[data-view]").forEach((button) => {

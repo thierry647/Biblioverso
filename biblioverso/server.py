@@ -315,7 +315,10 @@ def validate_review(payload):
 
 
 def normalize_identifier(value):
-    return str(value or "").strip().lower()
+    cleaned = str(value or "").strip().lower()
+    if is_phone(cleaned):
+        return normalize_phone(cleaned)
+    return cleaned
 
 
 def is_email(value):
@@ -324,6 +327,18 @@ def is_email(value):
 
 def is_phone(value):
     return any(character.isdigit() for character in value) and "@" not in value
+
+
+def normalize_phone(value):
+    return "".join(character for character in str(value or "") if character.isdigit())
+
+
+def identifier_variants(value):
+    normalized = normalize_identifier(value)
+    variants = {normalized}
+    if is_phone(value):
+        variants.add(str(value or "").strip().lower())
+    return list(variants)
 
 
 def get_admin_name(identifier):
@@ -417,12 +432,16 @@ def login_user():
         )
 
     with get_connection() as connection:
+        variants = identifier_variants(payload.get("identifier") or payload.get("contact"))
+        placeholders = ",".join("?" for _ in variants)
         row = connection.execute(
-            """
+            f"""
             SELECT * FROM users
-            WHERE lower(username) = ? OR lower(email) = ? OR lower(phone) = ?
+            WHERE lower(username) IN ({placeholders})
+               OR lower(email) IN ({placeholders})
+               OR lower(phone) IN ({placeholders})
             """,
-            (identifier, identifier, identifier),
+            (*variants, *variants, *variants),
         ).fetchone()
 
     if not row or not check_password_hash(row["password_hash"], password):
