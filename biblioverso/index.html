@@ -19,8 +19,9 @@
         <div class="auth-copy">
           <p class="eyebrow">Comunidade literária</p>
           <h1 id="login-title">Entre para descobrir leituras, clubes e autores.</h1>
+          <p id="auth-helper" class="auth-helper">Use sua conta salva para voltar ao feed sem criar outro cadastro.</p>
         </div>
-        <form id="login-form" class="auth-form">
+        <form id="login-form" class="auth-form" novalidate>
           <label>
             Usuário, email ou telefone
             <input name="identifier" autocomplete="username" placeholder="thierry, voce@email.com ou telefone" required />
@@ -30,23 +31,25 @@
             <input name="password" type="password" autocomplete="current-password" placeholder="Sua senha" required />
           </label>
           <button class="primary-button" type="submit">Entrar</button>
+          <p class="form-hint">Se você já criou uma conta neste navegador, é só entrar com o mesmo usuário, email ou telefone.</p>
         </form>
-        <form id="register-form" class="auth-form" hidden>
+        <form id="register-form" class="auth-form" novalidate>
           <label>
             Usuário, email ou telefone
             <input name="identifier" autocomplete="username" placeholder="thierry, voce@email.com ou telefone" required />
           </label>
           <label>
             Senha
-            <input name="password" type="password" autocomplete="new-password" placeholder="Crie uma senha" required />
+            <input name="password" type="password" autocomplete="new-password" placeholder="Crie uma senha com 8 caracteres ou mais" minlength="8" required />
           </label>
           <button class="primary-button" type="submit">Criar conta</button>
+          <p class="form-hint">Use pelo menos 8 caracteres na senha. Depois do cadastro você entra direto.</p>
         </form>
         <div class="account-actions">
           <button id="toggle-auth-mode" class="ghost-button" type="button">Criar conta</button>
           <button id="logout-button" class="ghost-button" type="button" hidden>Sair</button>
         </div>
-        <p id="session-status">Você precisa entrar para acessar o Biblioverso.</p>
+        <p id="session-status" role="alert" aria-live="polite">Você precisa entrar para acessar o Biblioverso.</p>
       </div>
     </section>
 
@@ -286,6 +289,6 @@
       </article>
     </template>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
   </body>
 </html>

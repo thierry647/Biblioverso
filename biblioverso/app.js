@@ -1,4 +1,3 @@
-const adminPassword = "thierry123@";
 const sessionKey = "biblioverso-session";
 const libraryKey = "biblioverso-library";
 
@@ -76,16 +75,17 @@ const adminPanel = document.querySelector("#admin-panel");
 const adminList = document.querySelector("#admin-list");
 const authTitle = document.querySelector("#login-title");
 const authCopy = document.querySelector(".auth-copy");
+const authHelper = document.querySelector("#auth-helper");
 const authCopyText = document.createElement("p");
 
-loginForm.querySelector("label").childNodes[0].nodeValue = "Email ou numero de telefone";
-registerForm.querySelector("label").childNodes[0].nodeValue = "Email ou numero de telefone";
-loginForm.elements.identifier.placeholder = "voce@email.com ou (11) 99999-9999";
-registerForm.elements.identifier.placeholder = "voce@email.com ou (11) 99999-9999";
-loginForm.elements.identifier.inputMode = "email";
-registerForm.elements.identifier.inputMode = "email";
+loginForm.querySelector("label").childNodes[0].nodeValue = "Usuario, email ou telefone";
+registerForm.querySelector("label").childNodes[0].nodeValue = "Usuario, email ou telefone";
+loginForm.elements.identifier.placeholder = "thierry, voce@email.com ou (11) 99999-9999";
+registerForm.elements.identifier.placeholder = "thierry, voce@email.com ou (11) 99999-9999";
+loginForm.elements.identifier.inputMode = "text";
+registerForm.elements.identifier.inputMode = "text";
 authTitle.textContent = "Entre no Biblioverso";
-authCopyText.textContent = "Entre com email ou telefone para acessar seu feed de leituras.";
+authCopyText.textContent = "Entre com usuario, email ou telefone para acessar seu feed de leituras.";
 authCopy.append(authCopyText);
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -119,62 +119,71 @@ sidebarLogoutButton.addEventListener("click", logout);
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(loginForm);
-  const response = await postJson("/api/auth/login", {
-    identifier: form.get("identifier").trim(),
-    password: form.get("password"),
-  });
+  const validation = validateAuthForm(loginForm, "login");
+  if (validation) return showFormError(validation.message, loginForm, validation.field);
+  await withFormStatus(loginForm, "Entrando...", async () => {
+    const form = new FormData(loginForm);
+    const response = await postJson("/api/auth/login", {
+      identifier: form.get("identifier").trim(),
+      password: form.get("password"),
+    });
 
-  if (!response.ok) return showFormError(response.data.error);
-  state.session = response.data.user;
-  saveSession();
-  loginForm.reset();
-  await loadUserExtras();
-  showView(defaultView);
-  render();
+    if (!response.ok) return showFormError(getAuthErrorMessage(response.data.error, "login"), loginForm);
+    state.session = response.data.user;
+    saveSession();
+    loginForm.reset();
+    await loadUserExtras();
+    showView(defaultView);
+    render();
+  });
 });
 
 registerForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(registerForm);
-  const identifier = form.get("identifier").trim();
-  const response = await postJson("/api/auth/register", {
-    name: displayNameFromIdentifier(identifier),
-    identifier,
-    password: form.get("password"),
-  });
+  const validation = validateAuthForm(registerForm, "register");
+  if (validation) return showFormError(validation.message, registerForm, validation.field);
+  await withFormStatus(registerForm, "Criando conta...", async () => {
+    const form = new FormData(registerForm);
+    const identifier = form.get("identifier").trim();
+    const response = await postJson("/api/auth/register", {
+      identifier,
+      password: form.get("password"),
+    });
 
-  if (!response.ok) return showFormError(response.data.error);
-  state.session = response.data.user;
-  saveSession();
-  registerForm.reset();
-  state.authMode = "login";
-  await loadUserExtras();
-  showView(defaultView);
-  render();
+    if (!response.ok) return showFormError(getAuthErrorMessage(response.data.error, "register"), registerForm);
+    state.session = response.data.user;
+    saveSession();
+    registerForm.reset();
+    state.authMode = "login";
+    await loadUserExtras();
+    showView(defaultView);
+    render();
+  });
 });
 
 searchInput.addEventListener("input", renderFeed);
 
 reviewForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(reviewForm);
-  const reviewer = state.session?.name || "Visitante";
-  const response = await postJson("/api/reviews", {
-    title: form.get("title").trim(),
-    author: form.get("author").trim(),
-    category: form.get("category"),
-    rating: Number(form.get("rating")),
-    text: form.get("text").trim(),
-    reviewer,
-  });
+  await withFormStatus(reviewForm, "Salvando...", async () => {
+    const form = new FormData(reviewForm);
+    const reviewer = state.session?.name || "Visitante";
+    const response = await postJson("/api/reviews", {
+      title: form.get("title").trim(),
+      author: form.get("author").trim(),
+      category: form.get("category"),
+      rating: Number(form.get("rating")),
+      text: form.get("text").trim(),
+      reviewer,
+    });
 
-  if (!response.ok) return alert(response.data.error || "Não foi possível salvar o depoimento.");
-  reviewForm.reset();
-  reviewForm.elements.rating.value = 5;
-  await fetchReviews();
-  showView("feed");
-  render();
+    if (!response.ok) return alert(response.data.error || "Não foi possível salvar o depoimento.");
+    reviewForm.reset();
+    reviewForm.elements.rating.value = 5;
+    await fetchReviews();
+    showView("feed");
+    render();
+  });
 });
 
 wantForm.addEventListener("submit", (event) => {
@@ -191,67 +200,83 @@ wantForm.addEventListener("submit", (event) => {
 profileBioForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!isRealUser()) return alert("Entre com uma conta de leitor para editar o perfil.");
-  const form = new FormData(profileBioForm);
-  const response = await requestJson(`/api/users/${state.session.id}/profile`, {
-    method: "PATCH",
-    body: {
-      bio: form.get("bio"),
-      socialLinks: form.get("socialLinks"),
-    },
-  });
+  await withFormStatus(profileBioForm, "Salvando...", async () => {
+    const form = new FormData(profileBioForm);
+    const response = await requestJson(`/api/users/${state.session.id}/profile`, {
+      method: "PATCH",
+      body: {
+        bio: form.get("bio"),
+        socialLinks: form.get("socialLinks"),
+      },
+    });
 
-  if (!response.ok) return alert(response.data.error || "Não foi possível salvar o perfil.");
-  state.session = response.data.user;
-  saveSession();
-  renderProfile();
+    if (!response.ok) return alert(response.data.error || "Não foi possível salvar o perfil.");
+    state.session = response.data.user;
+    saveSession();
+    renderProfile();
+  });
 });
 
 authorBookForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!isRealUser()) return alert("Entre com uma conta de leitor para publicar seu livro.");
-  const form = new FormData(authorBookForm);
-  const response = await postJson(`/api/users/${state.session.id}/books`, {
-    title: form.get("title").trim(),
-    genre: form.get("genre").trim(),
-    description: form.get("description").trim(),
-    link: form.get("link").trim(),
-  });
+  await withFormStatus(authorBookForm, "Publicando...", async () => {
+    const form = new FormData(authorBookForm);
+    const response = await postJson(`/api/users/${state.session.id}/books`, {
+      title: form.get("title").trim(),
+      genre: form.get("genre").trim(),
+      description: form.get("description").trim(),
+      link: form.get("link").trim(),
+    });
 
-  if (!response.ok) return alert(response.data.error || "Não foi possível publicar o livro.");
-  authorBookForm.reset();
-  await fetchUserBooks();
-  renderProfile();
+    if (!response.ok) return alert(response.data.error || "Não foi possível publicar o livro.");
+    authorBookForm.reset();
+    await fetchUserBooks();
+    renderProfile();
+  });
 });
 
 clubForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(clubForm);
-  const response = await requestJson("/api/clubs", {
-    method: "POST",
-    headers: getAdminHeaders(),
-    body: {
-      title: form.get("title").trim(),
-      theme: form.get("theme").trim(),
-      description: form.get("description").trim(),
-    },
-  });
+  await withFormStatus(clubForm, "Criando clube...", async () => {
+    const form = new FormData(clubForm);
+    const response = await requestJson("/api/clubs", {
+      method: "POST",
+      headers: getAdminHeaders(),
+      body: {
+        title: form.get("title").trim(),
+        theme: form.get("theme").trim(),
+        description: form.get("description").trim(),
+      },
+    });
 
-  if (!response.ok) return alert(response.data.error || "Não foi possível criar o clube.");
-  clubForm.reset();
-  await fetchClubs();
-  renderClubs();
+    if (!response.ok) return alert(response.data.error || "Não foi possível criar o clube.");
+    clubForm.reset();
+    await fetchClubs();
+    renderClubs();
+  });
 });
 
 function loadSession() {
   try {
-    return JSON.parse(localStorage.getItem(sessionKey)) || null;
+    const savedSession = JSON.parse(localStorage.getItem(sessionKey)) || null;
+    if (!savedSession?.id || !savedSession?.name || !savedSession?.role) {
+      localStorage.removeItem(sessionKey);
+      return null;
+    }
+    return savedSession;
   } catch {
+    localStorage.removeItem(sessionKey);
     return null;
   }
 }
 
 function saveSession() {
   if (!state.session) {
+    localStorage.removeItem(sessionKey);
+    return;
+  }
+  if (isAdmin()) {
     localStorage.removeItem(sessionKey);
     return;
   }
@@ -272,30 +297,62 @@ function saveLibrary() {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    method: options.method || "GET",
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers || {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const data = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, data };
+  try {
+    const response = await fetch(url, {
+      method: options.method || "GET",
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.headers || {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    const data = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, data };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      data: { error: "Não foi possível conectar ao servidor. Tente novamente em instantes." },
+    };
+  }
 }
 
 function postJson(url, body) {
   return requestJson(url, { method: "POST", body });
 }
 
+async function withFormStatus(form, busyText, action) {
+  const submitButton = form.querySelector('button[type="submit"]');
+  const originalText = submitButton?.textContent;
+  form.dataset.busy = "true";
+  form.querySelectorAll("button, input, select, textarea").forEach((field) => {
+    field.disabled = true;
+  });
+  if (submitButton) submitButton.textContent = busyText;
+
+  try {
+    await action();
+  } finally {
+    delete form.dataset.busy;
+    form.querySelectorAll("button, input, select, textarea").forEach((field) => {
+      field.disabled = false;
+    });
+    if (submitButton) submitButton.textContent = originalText;
+  }
+}
+
 async function fetchReviews() {
   const response = await requestJson("/api/reviews");
-  state.reviews = response.data.reviews || [];
+  if (response.ok) {
+    state.reviews = response.data.reviews || [];
+  }
 }
 
 async function fetchClubs() {
   const response = await requestJson("/api/clubs");
-  state.clubs = response.data.clubs || [];
+  if (response.ok) {
+    state.clubs = response.data.clubs || [];
+  }
 }
 
 async function fetchUserBooks() {
@@ -304,7 +361,9 @@ async function fetchUserBooks() {
     return;
   }
   const response = await requestJson(`/api/users/${state.session.id}/books`);
-  state.userBooks = response.data.books || [];
+  if (response.ok) {
+    state.userBooks = response.data.books || [];
+  }
 }
 
 async function loadUserExtras() {
@@ -404,14 +463,18 @@ function renderAuthForms() {
   adminNavItem.hidden = !adminUser;
   toggleAuthModeButton.textContent = state.authMode === "login" ? "Fazer cadastro" : "Voltar ao login";
   authTitle.textContent = state.authMode === "login" ? "Entre no Biblioverso" : "Crie sua conta";
+  authHelper.textContent =
+    state.authMode === "login"
+      ? "Use o mesmo usuario, email ou telefone do cadastro. Sua sessão fica salva neste navegador."
+      : "Use um usuario, email ou telefone e crie uma senha para voltar depois.";
   authCopyText.textContent =
     state.authMode === "login"
       ? "Acesse seu feed de feedbacks literarios e descubra novas leituras pela voz da comunidade."
-      : "Cadastre seu email ou numero, crie uma senha e entre direto no seu feed.";
+      : "Escolha um usuario, email ou telefone, crie uma senha e entre direto no seu feed.";
   toggleAuthModeButton.textContent = state.authMode === "login" ? "Criar conta" : "Já tenho conta";
 
   if (!logged) {
-    sessionStatus.textContent = "Você está como visitante.";
+    if (!sessionStatus.dataset.tone) sessionStatus.textContent = "Você está como visitante.";
     return;
   }
 
@@ -420,8 +483,45 @@ function renderAuthForms() {
   sessionStatus.textContent = `${state.session.name}${handle} entrou como ${roleText}.`;
 }
 
-function showFormError(message) {
+function validateAuthForm(form, mode) {
+  clearAuthErrors(form);
+  const identifier = String(form.elements.identifier.value || "").trim();
+  const password = String(form.elements.password.value || "");
+
+  if (!identifier) {
+    return { field: "identifier", message: "Informe seu usuário, email ou telefone para continuar." };
+  }
+  if (!password) {
+    return { field: "password", message: "Informe sua senha para continuar." };
+  }
+  if (mode === "register" && password.length < 8) {
+    return { field: "password", message: "Sua senha precisa ter pelo menos 8 caracteres." };
+  }
+  return null;
+}
+
+function clearAuthErrors(form) {
+  form.querySelectorAll("input").forEach((field) => field.removeAttribute("aria-invalid"));
+  delete sessionStatus.dataset.tone;
+}
+
+function showFormError(message, form, fieldName) {
+  if (form && fieldName) form.elements[fieldName].setAttribute("aria-invalid", "true");
+  sessionStatus.dataset.tone = "error";
   sessionStatus.textContent = message || "Não foi possível concluir a ação.";
+}
+
+function getAuthErrorMessage(message, mode) {
+  if (message === "Usuário ou senha inválidos.") {
+    return "Não encontramos essa combinação. Confira a identificação e a senha ou crie uma conta.";
+  }
+  if (message?.includes("Já existe uma conta")) {
+    return "Essa identificação já está cadastrada. Entre com a senha dessa conta ou escolha outra identificação.";
+  }
+  if (mode === "register" && message?.includes("8 caracteres")) {
+    return "Sua senha precisa ter pelo menos 8 caracteres.";
+  }
+  return message || "Não foi possível concluir a ação. Tente novamente.";
 }
 
 function renderFeed() {
@@ -452,8 +552,13 @@ function renderFeed() {
     const likeButton = card.querySelector(".like-button");
     likeButton.textContent = `Curtir (${review.likes})`;
     likeButton.addEventListener("click", async () => {
+      likeButton.disabled = true;
       rememberLikedReview(review.id);
-      await fetch(`/api/reviews/${review.id}/like`, { method: "POST" });
+      const response = await postJson(`/api/reviews/${review.id}/like`, {});
+      if (!response.ok) {
+        likeButton.disabled = false;
+        return alert(response.data.error || "Não foi possível curtir este depoimento.");
+      }
       await fetchReviews();
       render();
     });
@@ -891,7 +996,8 @@ function isRealUser() {
 
 function getAdminHeaders() {
   if (!isAdmin()) return {};
-  return { "X-Admin-Password": adminPassword };
+  if (!state.session.adminToken) return {};
+  return { "X-Admin-Token": state.session.adminToken };
 }
 
 function logout() {
@@ -902,19 +1008,12 @@ function logout() {
   render();
 }
 
-function displayNameFromIdentifier(identifier) {
-  const cleaned = String(identifier || "").trim();
-  if (!cleaned) return "Leitor";
-  const baseName = cleaned.includes("@") ? cleaned.split("@")[0] : cleaned;
-  return baseName.replace(/[._-]+/g, " ").trim() || "Leitor";
-}
-
 function coverColor(index) {
   const colors = ["#8fbc9b", "#a7c7e7", "#f0b7a4", "#c8b6df", "#e7cf8f"];
   return colors[index % colors.length];
 }
 
-Promise.all([fetchReviews(), fetchClubs(), loadUserExtras()]).then(() => {
+Promise.allSettled([fetchReviews(), fetchClubs(), loadUserExtras()]).then(() => {
   if (state.session) showView(defaultView);
   render();
 });

@@ -1,4 +1,5 @@
 from pathlib import Path
+from contextlib import contextmanager
 import json
 import os
 import sqlite3
@@ -12,7 +13,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "data.json"
 DATABASE_FILE = BASE_DIR / "biblioverso.db"
-ADMIN_PASSWORD = os.environ.get("BIBLIOVERSO_ADMIN_PASSWORD", "thierry123@")
+ADMIN_PASSWORD = os.environ.get("BIBLIOVERSO_ADMIN_PASSWORD")
+ADMIN_TOKENS = set()
 
 
 SEED_REVIEWS = [
@@ -79,14 +81,21 @@ SEED_CLUBS = [
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 
 
+@contextmanager
 def get_connection():
     connection = sqlite3.connect(DATABASE_FILE)
     connection.row_factory = sqlite3.Row
-    return connection
+    connection.execute("PRAGMA foreign_keys = ON")
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def init_database():
     with get_connection() as connection:
+        connection.execute("PRAGMA journal_mode = WAL")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS reviews (
@@ -156,6 +165,15 @@ def init_database():
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_user_books_user_id ON user_books (user_id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_username ON users (username COLLATE NOCASE)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_email ON users (email COLLATE NOCASE)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_phone ON users (phone COLLATE NOCASE)"
         )
 
         if connection.execute("SELECT COUNT(*) FROM reviews").fetchone()[0] == 0:
@@ -326,7 +344,10 @@ def is_email(value):
 
 
 def is_phone(value):
-    return any(character.isdigit() for character in value) and "@" not in value
+    cleaned = str(value or "").strip()
+    digits = normalize_phone(cleaned)
+    has_letters = any(character.isalpha() for character in cleaned)
+    return bool(digits) and len(digits) >= 8 and not has_letters and "@" not in cleaned
 
 
 def normalize_phone(value):
@@ -336,6 +357,10 @@ def normalize_phone(value):
 def identifier_variants(value):
     normalized = normalize_identifier(value)
     variants = {normalized}
+    if not is_email(value):
+        digits = normalize_phone(value)
+        if len(digits) >= 8:
+            variants.add(digits)
     if is_phone(value):
         variants.add(str(value or "").strip().lower())
     return list(variants)
@@ -346,8 +371,18 @@ def get_admin_name(identifier):
     return cleaned or "Administrador"
 
 
+def get_display_name(identifier):
+    cleaned = str(identifier or "").strip()
+    if is_email(cleaned):
+        cleaned = cleaned.split("@", 1)[0]
+    if is_phone(cleaned):
+        return "Leitor"
+    return cleaned or "Leitor"
+
+
 def is_admin_request():
-    return request.headers.get("X-Admin-Password") == ADMIN_PASSWORD
+    admin_token = request.headers.get("X-Admin-Token")
+    return bool(admin_token and admin_token in ADMIN_TOKENS)
 
 
 @app.get("/")
@@ -363,21 +398,20 @@ def health():
 @app.post("/api/auth/register")
 def register_user():
     payload = request.get_json(silent=True) or {}
-    name = str(payload.get("name", "")).strip()
     identifier = normalize_identifier(payload.get("identifier") or payload.get("contact"))
     password = str(payload.get("password", ""))
 
-    if not name or not identifier or not password:
-        return jsonify({"error": "Informe nome, usuário/email/telefone e senha."}), 400
-    if len(password) < 4:
-        return jsonify({"error": "A senha precisa ter pelo menos 4 caracteres."}), 400
+    if not identifier or not password:
+        return jsonify({"error": "Informe usuário, email ou telefone e senha."}), 400
+    if len(password) < 8:
+        return jsonify({"error": "A senha precisa ter pelo menos 8 caracteres."}), 400
 
     email = identifier if is_email(identifier) else None
     phone = identifier if is_phone(identifier) and not email else None
     username = None if email or phone else identifier
     user = {
         "id": str(uuid.uuid4()),
-        "name": name,
+        "name": get_display_name(identifier),
         "username": username,
         "email": email,
         "phone": phone,
@@ -390,6 +424,19 @@ def register_user():
 
     try:
         with get_connection() as connection:
+            # Login resolves identifiers without case sensitivity, so registration
+            # must enforce the same rule to avoid ambiguous accounts.
+            existing_user = connection.execute(
+                """
+                SELECT 1 FROM users
+                WHERE username COLLATE NOCASE = ?
+                   OR email COLLATE NOCASE = ?
+                   OR phone COLLATE NOCASE = ?
+                """,
+                (username or "", email or "", phone or ""),
+            ).fetchone()
+            if existing_user:
+                return jsonify({"error": "Já existe uma conta com esse usuário, email ou telefone."}), 409
             connection.execute(
                 """
                 INSERT INTO users (
@@ -415,7 +462,9 @@ def login_user():
     if not identifier or not password:
         return jsonify({"error": "Informe usuário, email ou telefone e senha."}), 400
 
-    if password == ADMIN_PASSWORD:
+    if ADMIN_PASSWORD and password == ADMIN_PASSWORD:
+        admin_token = str(uuid.uuid4())
+        ADMIN_TOKENS.add(admin_token)
         return jsonify(
             {
                 "user": {
@@ -427,6 +476,7 @@ def login_user():
                     "role": "admin",
                     "bio": "",
                     "socialLinks": "",
+                    "adminToken": admin_token,
                 }
             }
         )
@@ -437,9 +487,9 @@ def login_user():
         row = connection.execute(
             f"""
             SELECT * FROM users
-            WHERE lower(username) IN ({placeholders})
-               OR lower(email) IN ({placeholders})
-               OR lower(phone) IN ({placeholders})
+            WHERE username COLLATE NOCASE IN ({placeholders})
+               OR email COLLATE NOCASE IN ({placeholders})
+               OR phone COLLATE NOCASE IN ({placeholders})
             """,
             (*variants, *variants, *variants),
         ).fetchone()

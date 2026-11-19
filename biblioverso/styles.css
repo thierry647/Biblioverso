@@ -33,7 +33,7 @@ body {
 }
 
 .auth-gate {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 32px;
@@ -45,9 +45,10 @@ body {
 
 .auth-card {
   position: relative;
-  width: min(440px, 100%);
-  overflow: hidden;
-  padding: 30px;
+  width: min(400px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 26px;
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
@@ -88,8 +89,16 @@ body {
 
 .auth-copy h1 {
   margin-bottom: 10px;
-  font-size: clamp(2rem, 8vw, 3.3rem);
-  line-height: 0.98;
+  font-size: 2.25rem;
+  line-height: 1.05;
+}
+
+.auth-helper,
+.form-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .auth-form {
@@ -107,6 +116,15 @@ body {
   margin: 16px 0 0;
   font-size: 0.92rem;
   font-weight: 700;
+}
+
+#session-status[data-tone="error"] {
+  color: #a93e35;
+}
+
+.auth-form input[aria-invalid="true"] {
+  border-color: #c84d42;
+  box-shadow: 0 0 0 3px rgba(200, 77, 66, 0.14);
 }
 
 .auth-locked {
@@ -318,6 +336,14 @@ textarea:focus {
 
 button:hover {
   transform: translateY(-2px);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 button:active,
@@ -760,6 +786,21 @@ h2 {
 }
 
 @media (max-width: 520px) {
+  .auth-gate {
+    align-items: start;
+    padding: 16px;
+  }
+
+  .auth-card {
+    max-height: none;
+    margin: auto 0;
+    padding: 22px;
+  }
+
+  .auth-copy h1 {
+    font-size: 1.85rem;
+  }
+
   .review-card {
     grid-template-columns: 1fr;
   }
